@@ -82,7 +82,7 @@ function HomePage() {
   );
 }
 
-function Header({ liveCount, total }: { liveCount: number; total: number }) {
+function Header({ liveCount, total, lastUpdate }: { liveCount: number; total: number; lastUpdate: number }) {
   return (
     <header className="sticky top-0 z-20 border-b border-border/40 bg-background/70 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1500px] items-center justify-between px-4 py-4 lg:px-8">
