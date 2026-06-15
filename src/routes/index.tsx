@@ -312,6 +312,7 @@ function FieldCard({ event }: { event: SDBEvent }) {
               key={`${event.idHomeTeam}-${event.idAwayTeam}`}
               home={data.home}
               away={data.away}
+              live={isLive}
             />
           )}
         </Suspense>
