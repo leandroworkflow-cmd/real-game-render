@@ -31,10 +31,11 @@ function statusOf(e: SDBEvent): "LIVE" | "FT" | "NS" {
 }
 
 function HomePage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ["matches"],
     queryFn: () => getMatches(),
-    refetchInterval: 60_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: true,
   });
 
   const events = data?.events ?? [];
