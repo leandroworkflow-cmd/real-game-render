@@ -262,6 +262,7 @@ function ProbabilityBar({ event }: { event: SDBEvent }) {
 }
 
 function FieldCard({ event }: { event: SDBEvent }) {
+  const isLive = statusOf(event) === "LIVE";
   const { data, isLoading } = useQuery({
     queryKey: ["lineup", event.idHomeTeam, event.idAwayTeam],
     queryFn: () => getLineup({ data: { homeTeamId: event.idHomeTeam, awayTeamId: event.idAwayTeam } }),
