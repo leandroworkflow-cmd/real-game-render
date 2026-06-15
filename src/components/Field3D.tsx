@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useLoader } from "@react-three/fiber";
-import { OrbitControls, Text } from "@react-three/drei";
+import { OrbitControls, Text, Line } from "@react-three/drei";
 import { Suspense, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { SDBPlayer } from "@/lib/sportsdb.functions";
@@ -33,20 +33,19 @@ function Pitch() {
         </mesh>
       ))}
       {/* Outline */}
-      <line>
-        <bufferGeometry attach="geometry" {...(() => {
-          const pts = [
-            new THREE.Vector3(-PITCH_W / 2, 0.01, -PITCH_L / 2),
-            new THREE.Vector3(PITCH_W / 2, 0.01, -PITCH_L / 2),
-            new THREE.Vector3(PITCH_W / 2, 0.01, PITCH_L / 2),
-            new THREE.Vector3(-PITCH_W / 2, 0.01, PITCH_L / 2),
-            new THREE.Vector3(-PITCH_W / 2, 0.01, -PITCH_L / 2),
-          ];
-          const g = new THREE.BufferGeometry().setFromPoints(pts);
-          return { attach: "geometry", ...g } as any;
-        })()} />
-        <lineBasicMaterial color="#9ef6c2" transparent opacity={0.7} />
-      </line>
+      <Line
+        points={[
+          [-PITCH_W / 2, 0.015, -PITCH_L / 2],
+          [PITCH_W / 2, 0.015, -PITCH_L / 2],
+          [PITCH_W / 2, 0.015, PITCH_L / 2],
+          [-PITCH_W / 2, 0.015, PITCH_L / 2],
+          [-PITCH_W / 2, 0.015, -PITCH_L / 2],
+        ]}
+        color="#9ef6c2"
+        lineWidth={2}
+        transparent
+        opacity={0.7}
+      />
       {/* Halfway line */}
       <mesh position={[0, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[PITCH_W, 0.04]} />
