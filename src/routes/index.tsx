@@ -282,6 +282,12 @@ function FieldCard({ event }: { event: SDBEvent }) {
           <span className="text-neon">CAMPO 3D</span> · Escalação real · TheSportsDB
         </span>
         <div className="flex items-center gap-3">
+          {isLive && (
+            <span className="flex items-center gap-1 rounded-full bg-neon/15 px-2 py-0.5 text-[9px] text-neon">
+              <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-neon" />
+              MOV. LIVE
+            </span>
+          )}
           <LegendDot color="bg-neon" label={event.strHomeTeam} />
           <LegendDot color="bg-magenta" label={event.strAwayTeam} />
         </div>
