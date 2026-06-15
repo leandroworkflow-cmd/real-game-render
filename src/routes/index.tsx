@@ -31,10 +31,11 @@ function statusOf(e: SDBEvent): "LIVE" | "FT" | "NS" {
 }
 
 function HomePage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ["matches"],
     queryFn: () => getMatches(),
-    refetchInterval: 60_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: true,
   });
 
   const events = data?.events ?? [];
@@ -51,7 +52,7 @@ function HomePage() {
 
   return (
     <div className="min-h-screen">
-      <Header liveCount={live.length} total={events.length} />
+      <Header liveCount={live.length} total={events.length} lastUpdate={dataUpdatedAt} />
       <main className="mx-auto max-w-[1500px] px-4 pb-16 pt-6 lg:px-8">
         {isLoading && <SkeletonHero />}
         {!isLoading && selected && (
@@ -81,7 +82,7 @@ function HomePage() {
   );
 }
 
-function Header({ liveCount, total }: { liveCount: number; total: number }) {
+function Header({ liveCount, total, lastUpdate }: { liveCount: number; total: number; lastUpdate: number }) {
   return (
     <header className="sticky top-0 z-20 border-b border-border/40 bg-background/70 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1500px] items-center justify-between px-4 py-4 lg:px-8">
@@ -108,7 +109,7 @@ function Header({ liveCount, total }: { liveCount: number; total: number }) {
             </span>
           </div>
           <div className="rounded-md border border-border bg-card/60 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            TheSportsDB · ON
+            <span className="text-neon">●</span> SYNC {lastUpdate ? new Date(lastUpdate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "…"}
           </div>
         </div>
       </div>
@@ -261,6 +262,7 @@ function ProbabilityBar({ event }: { event: SDBEvent }) {
 }
 
 function FieldCard({ event }: { event: SDBEvent }) {
+  const isLive = statusOf(event) === "LIVE";
   const { data, isLoading } = useQuery({
     queryKey: ["lineup", event.idHomeTeam, event.idAwayTeam],
     queryFn: () => getLineup({ data: { homeTeamId: event.idHomeTeam, awayTeamId: event.idAwayTeam } }),
@@ -280,6 +282,12 @@ function FieldCard({ event }: { event: SDBEvent }) {
           <span className="text-neon">CAMPO 3D</span> · Escalação real · TheSportsDB
         </span>
         <div className="flex items-center gap-3">
+          {isLive && (
+            <span className="flex items-center gap-1 rounded-full bg-neon/15 px-2 py-0.5 text-[9px] text-neon">
+              <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-neon" />
+              MOV. LIVE
+            </span>
+          )}
           <LegendDot color="bg-neon" label={event.strHomeTeam} />
           <LegendDot color="bg-magenta" label={event.strAwayTeam} />
         </div>
@@ -304,6 +312,7 @@ function FieldCard({ event }: { event: SDBEvent }) {
               key={`${event.idHomeTeam}-${event.idAwayTeam}`}
               home={data.home}
               away={data.away}
+              live={isLive}
             />
           )}
         </Suspense>

@@ -1,6 +1,6 @@
-import { Canvas, useFrame, useLoader } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Text, Line } from "@react-three/drei";
-import { Suspense, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { SDBPlayer } from "@/lib/sportsdb.functions";
 
@@ -16,23 +16,19 @@ const PITCH_W = 7;
 const PITCH_L = 11;
 
 function Pitch() {
-  // Lines as thin emissive boxes
   const lineMat = new THREE.MeshBasicMaterial({ color: "#9ef6c2", transparent: true, opacity: 0.55 });
   return (
     <group>
-      {/* Grass */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[PITCH_W, PITCH_L]} />
         <meshStandardMaterial color="#0c2418" emissive="#0a3d22" emissiveIntensity={0.25} roughness={0.9} />
       </mesh>
-      {/* Stripes */}
       {Array.from({ length: 10 }).map((_, i) => (
         <mesh key={i} position={[0, 0.001, -PITCH_L / 2 + 0.55 + i * 1.1]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[PITCH_W, 0.55]} />
           <meshStandardMaterial color={i % 2 === 0 ? "#0e2a1c" : "#0a2317"} />
         </mesh>
       ))}
-      {/* Outline */}
       <Line
         points={[
           [-PITCH_W / 2, 0.015, -PITCH_L / 2],
@@ -46,12 +42,10 @@ function Pitch() {
         transparent
         opacity={0.7}
       />
-      {/* Halfway line */}
       <mesh position={[0, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[PITCH_W, 0.04]} />
         <primitive object={lineMat} attach="material" />
       </mesh>
-      {/* Center circle */}
       <mesh position={[0, 0.013, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.9, 0.95, 64]} />
         <meshBasicMaterial color="#9ef6c2" transparent opacity={0.6} />
@@ -60,14 +54,8 @@ function Pitch() {
         <circleGeometry args={[0.08, 32]} />
         <meshBasicMaterial color="#9ef6c2" />
       </mesh>
-      {/* Penalty boxes */}
       {[-1, 1].map((side) => (
         <group key={side}>
-          <mesh position={[0, 0.012, side * (PITCH_L / 2 - 0.9)]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[0, 0.001, 4]} />
-            <meshBasicMaterial color="#000" />
-          </mesh>
-          {/* Box outline using 4 thin planes */}
           {[
             { p: [0, 0.012, side * (PITCH_L / 2 - 1.8)] as [number, number, number], s: [3.6, 0.04] as [number, number] },
             { p: [1.8, 0.012, side * (PITCH_L / 2 - 0.9)] as [number, number, number], s: [0.04, 1.8] as [number, number] },
@@ -86,45 +74,72 @@ function Pitch() {
 
 function PlayerToken({
   player,
-  position,
+  basePosition,
   color,
   ringColor,
+  live,
+  seed,
 }: {
   player: SDBPlayer;
-  position: [number, number, number];
+  basePosition: [number, number, number];
   color: string;
   ringColor: string;
+  live: boolean;
+  seed: number;
 }) {
   const groupRef = useRef<THREE.Group>(null);
+  const billboardRef = useRef<THREE.Group>(null);
   const photoUrl = player.strCutout || player.strThumb;
 
-  useFrame(({ camera }) => {
+  // Per-player wandering parameters derived from seed
+  const wander = useMemo(() => {
+    const a = (seed * 9301 + 49297) % 233280;
+    const b = (seed * 1597 + 51749) % 233280;
+    const c = (seed * 2749 + 65537) % 233280;
+    return {
+      ax: 0.6 + (a / 233280) * 0.8,
+      az: 0.6 + (b / 233280) * 0.8,
+      phx: (a / 233280) * Math.PI * 2,
+      phz: (b / 233280) * Math.PI * 2,
+      sp: 0.25 + (c / 233280) * 0.35,
+    };
+  }, [seed]);
+
+  useFrame(({ camera, clock }) => {
     if (groupRef.current) {
-      groupRef.current.lookAt(camera.position.x, groupRef.current.position.y, camera.position.z);
+      const t = clock.getElapsedTime() * wander.sp;
+      const amp = live ? 0.55 : 0;
+      const dx = Math.sin(t + wander.phx) * wander.ax * amp;
+      const dz = Math.cos(t * 0.85 + wander.phz) * wander.az * amp;
+      groupRef.current.position.set(
+        basePosition[0] + dx,
+        basePosition[1],
+        basePosition[2] + dz,
+      );
+    }
+    if (billboardRef.current) {
+      billboardRef.current.lookAt(camera.position.x, billboardRef.current.getWorldPosition(new THREE.Vector3()).y, camera.position.z);
     }
   });
 
   return (
-    <group position={position}>
-      {/* Floor ring */}
+    <group ref={groupRef} position={basePosition}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
         <ringGeometry args={[0.32, 0.38, 32]} />
         <meshBasicMaterial color={ringColor} transparent opacity={0.85} />
       </mesh>
-      {/* Glow disc */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.018, 0]}>
         <circleGeometry args={[0.34, 32]} />
         <meshBasicMaterial color={color} transparent opacity={0.25} />
       </mesh>
-      {/* Billboard */}
-      <group ref={groupRef} position={[0, 0.55, 0]}>
-        {photoUrl ? (
-          <Suspense fallback={<NumberBadge number={player.strNumber} color={color} />}>
-            <PlayerPhoto url={photoUrl} color={color} />
-          </Suspense>
-        ) : (
-          <NumberBadge number={player.strNumber} color={color} />
-        )}
+      {live && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.019, 0]}>
+          <ringGeometry args={[0.42, 0.48, 32]} />
+          <meshBasicMaterial color={ringColor} transparent opacity={0.35} />
+        </mesh>
+      )}
+      <group ref={billboardRef} position={[0, 0.55, 0]}>
+        <PlayerVisual url={photoUrl} number={player.strNumber} color={color} />
         <Text
           position={[0, -0.55, 0.01]}
           fontSize={0.13}
@@ -161,12 +176,41 @@ function NumberBadge({ number, color }: { number?: string | null; color: string 
   );
 }
 
-function PlayerPhoto({ url, color }: { url: string; color: string }) {
-  const texture = useLoader(THREE.TextureLoader, url);
-  texture.colorSpace = THREE.SRGBColorSpace;
+function PlayerVisual({ url, number, color }: { url?: string | null; number?: string | null; color: string }) {
+  const [texture, setTexture] = useState<THREE.Texture | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!url) return;
+    let cancelled = false;
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin("anonymous");
+    loader.load(
+      url,
+      (tex) => {
+        if (cancelled) {
+          tex.dispose();
+          return;
+        }
+        tex.colorSpace = THREE.SRGBColorSpace;
+        setTexture(tex);
+      },
+      undefined,
+      () => {
+        if (!cancelled) setFailed(true);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (!url || failed || !texture) {
+    return <NumberBadge number={number} color={color} />;
+  }
+
   return (
     <group>
-      {/* Backdrop circle */}
       <mesh position={[0, 0, -0.01]}>
         <circleGeometry args={[0.42, 32]} />
         <meshBasicMaterial color={color} transparent opacity={0.95} />
@@ -183,7 +227,7 @@ function PlayerPhoto({ url, color }: { url: string; color: string }) {
   );
 }
 
-function Scene({ home, away }: { home: SDBPlayer[]; away: SDBPlayer[] }) {
+function Scene({ home, away, live }: { home: SDBPlayer[]; away: SDBPlayer[]; live: boolean }) {
   const homePositions = useMemo(
     () =>
       FORMATION_433.slice(0, home.length).map(([x, y]) => {
@@ -213,25 +257,29 @@ function Scene({ home, away }: { home: SDBPlayer[]; away: SDBPlayer[] }) {
         <PlayerToken
           key={`h-${p.idPlayer}`}
           player={p}
-          position={homePositions[i]}
+          basePosition={homePositions[i]}
           color="#7ef0a8"
           ringColor="#9ef6c2"
+          live={live}
+          seed={Number(p.idPlayer) || i + 1}
         />
       ))}
       {away.map((p, i) => (
         <PlayerToken
           key={`a-${p.idPlayer}`}
           player={p}
-          position={awayPositions[i]}
+          basePosition={awayPositions[i]}
           color="#d77bff"
           ringColor="#e9a8ff"
+          live={live}
+          seed={Number(p.idPlayer) || i + 100}
         />
       ))}
     </>
   );
 }
 
-export function Field3D({ home, away }: { home: SDBPlayer[]; away: SDBPlayer[] }) {
+export function Field3D({ home, away, live = false }: { home: SDBPlayer[]; away: SDBPlayer[]; live?: boolean }) {
   return (
     <Canvas
       shadows
@@ -240,7 +288,7 @@ export function Field3D({ home, away }: { home: SDBPlayer[]; away: SDBPlayer[] }
       gl={{ antialias: true, alpha: true }}
       style={{ background: "transparent" }}
     >
-      <Scene home={home} away={away} />
+      <Scene home={home} away={away} live={live} />
       <OrbitControls
         enablePan={false}
         minDistance={8}
