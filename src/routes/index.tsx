@@ -52,7 +52,7 @@ function HomePage() {
 
   return (
     <div className="min-h-screen">
-      <Header liveCount={live.length} total={events.length} />
+      <Header liveCount={live.length} total={events.length} lastUpdate={dataUpdatedAt} />
       <main className="mx-auto max-w-[1500px] px-4 pb-16 pt-6 lg:px-8">
         {isLoading && <SkeletonHero />}
         {!isLoading && selected && (
