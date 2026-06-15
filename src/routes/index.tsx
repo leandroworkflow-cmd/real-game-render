@@ -109,7 +109,7 @@ function Header({ liveCount, total, lastUpdate }: { liveCount: number; total: nu
             </span>
           </div>
           <div className="rounded-md border border-border bg-card/60 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            TheSportsDB · ON
+            <span className="text-neon">●</span> SYNC {lastUpdate ? new Date(lastUpdate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "…"}
           </div>
         </div>
       </div>
