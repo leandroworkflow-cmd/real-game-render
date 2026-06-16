@@ -131,9 +131,246 @@ function SectionTitle({ title, children }: { title: string; children?: React.Rea
 
 function FeaturedBlock({ event }: { event: SDBEvent }) {
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-      <MatchCard event={event} />
-      <FieldCard event={event} />
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+        <MatchCard event={event} />
+        <FieldCard event={event} />
+      </div>
+      <StatsPanel event={event} />
+    </div>
+  );
+}
+
+function normalize(s: string) {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function teamMatch(a: string, b: string) {
+  const na = normalize(a);
+  const nb = normalize(b);
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  // token overlap
+  const ta = new Set(na.match(/.{3,}/g) ?? []);
+  return Array.from(ta).some((t) => nb.includes(t));
+}
+
+function StatsPanel({ event }: { event: SDBEvent }) {
+  const date = (event.dateEvent || event.strTimestamp.slice(0, 10));
+  const { data: day, isLoading: dayLoading, error: dayError } = useQuery({
+    queryKey: ["af-day", date],
+    queryFn: () => getApiFootballDay({ data: { date } }),
+    staleTime: 10 * 60_000,
+    retry: 1,
+  });
+
+  const fixture = useMemo(() => {
+    if (!day) return null;
+    return (
+      day.fixtures.find(
+        (f) =>
+          teamMatch(f.homeName, event.strHomeTeam) &&
+          teamMatch(f.awayName, event.strAwayTeam),
+      ) ?? null
+    );
+  }, [day, event.strHomeTeam, event.strAwayTeam]);
+
+  const { data: details, isLoading: detailsLoading } = useQuery({
+    queryKey: ["af-details", fixture?.id],
+    queryFn: () => getApiFootballDetails({ data: { fixtureId: fixture!.id } }),
+    enabled: !!fixture,
+    staleTime: 60_000,
+    refetchInterval: statusOf(event) === "LIVE" ? 30_000 : false,
+  });
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1 }}
+      className="card-glass relative overflow-hidden rounded-2xl p-5"
+    >
+      <div className="grid-bg absolute inset-0 opacity-30" />
+      <div className="relative">
+        <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+          <span>
+            <span className="text-neon">ANÁLISE PROFUNDA</span> · API-Football · stats / cards / MOTM
+          </span>
+          {detailsLoading && <span className="text-neon">carregando…</span>}
+        </div>
+
+        {dayError && (
+          <div className="mt-4 text-xs text-magenta">
+            Falha ao consultar API-Football. Verifique se sua chave é válida.
+          </div>
+        )}
+
+        {!dayError && !dayLoading && !fixture && (
+          <div className="mt-4 text-xs text-muted-foreground">
+            Esta partida ainda não está disponível na API-Football (cobertura por liga). Outros jogos
+            podem ter dados completos — clique em um dos cards abaixo.
+          </div>
+        )}
+
+        {details && (
+          <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <StatsGrid stats={details.stats} />
+            <MotmCard motm={details.motm} />
+          </div>
+        )}
+
+        {details && details.events.length > 0 && (
+          <EventsTimeline events={details.events} />
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+const STAT_LABELS: Record<string, string> = {
+  "Shots on Goal": "Chutes ao gol",
+  "Shots off Goal": "Chutes pra fora",
+  "Total Shots": "Chutes totais",
+  "Blocked Shots": "Chutes bloqueados",
+  "Shots insidebox": "Chutes na área",
+  "Shots outsidebox": "Chutes de fora",
+  "Fouls": "Faltas",
+  "Corner Kicks": "Escanteios",
+  "Offsides": "Impedimentos",
+  "Ball Possession": "Posse de bola",
+  "Yellow Cards": "Cartões amarelos",
+  "Red Cards": "Cartões vermelhos",
+  "Goalkeeper Saves": "Defesas",
+  "Total passes": "Passes totais",
+  "Passes accurate": "Passes certos",
+  "Passes %": "Precisão de passes",
+  "expected_goals": "xG (esperados)",
+};
+
+const PRIORITY_STATS = [
+  "Shots on Goal",
+  "Total Shots",
+  "Fouls",
+  "Yellow Cards",
+  "Red Cards",
+  "Corner Kicks",
+  "Ball Possession",
+  "Offsides",
+];
+
+function StatsGrid({ stats }: { stats: { type: string; home: any; away: any }[] }) {
+  const ordered = [
+    ...PRIORITY_STATS.map((t) => stats.find((s) => s.type === t)).filter(Boolean) as typeof stats,
+    ...stats.filter((s) => !PRIORITY_STATS.includes(s.type)),
+  ];
+
+  return (
+    <div className="space-y-2">
+      {ordered.map((s) => {
+        const label = STAT_LABELS[s.type] ?? s.type;
+        const h = parseFloat(String(s.home ?? "0")) || 0;
+        const a = parseFloat(String(s.away ?? "0")) || 0;
+        const total = h + a || 1;
+        const hPct = (h / total) * 100;
+        return (
+          <div key={s.type} className="rounded-lg border border-border/40 bg-card/40 px-3 py-2">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-mono font-semibold text-neon">{s.home ?? "—"}</span>
+              <span className="uppercase tracking-widest text-muted-foreground">{label}</span>
+              <span className="font-mono font-semibold text-magenta">{s.away ?? "—"}</span>
+            </div>
+            <div className="mt-1.5 flex h-1 overflow-hidden rounded-full bg-background/60">
+              <div className="bg-neon transition-all" style={{ width: `${hPct}%` }} />
+              <div className="bg-magenta transition-all" style={{ width: `${100 - hPct}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MotmCard({ motm }: { motm: any }) {
+  if (!motm) {
+    return (
+      <div className="rounded-xl border border-border/40 bg-card/40 p-4 text-xs text-muted-foreground">
+        Melhor jogador será revelado após o início da partida.
+      </div>
+    );
+  }
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-neon/30 bg-gradient-to-br from-neon/10 to-transparent p-4">
+      <div className="text-[10px] uppercase tracking-[0.3em] text-neon">★ Melhor da partida</div>
+      <div className="mt-3 flex items-center gap-3">
+        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-neon/60 bg-card">
+          <img
+            src={motm.photo}
+            alt={motm.name}
+            className="h-full w-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+        </div>
+        <div className="min-w-0">
+          <div className="truncate font-display text-base font-semibold">{motm.name}</div>
+          <div className="mt-0.5 font-mono text-2xl font-bold text-neon">
+            {motm.rating?.toFixed(1) ?? "—"}
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] uppercase tracking-wider">
+        <Pill label="Gols" value={motm.goals} />
+        <Pill label="Assists" value={motm.assists} />
+        <Pill label="Chutes no gol" value={motm.shotsOnGoal} />
+        <Pill label="Amarelos" value={motm.yellowCards} />
+      </div>
+    </div>
+  );
+}
+
+function Pill({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between rounded-md border border-border/40 bg-background/40 px-2 py-1">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-mono font-semibold text-foreground">{value}</span>
+    </div>
+  );
+}
+
+function EventsTimeline({ events }: { events: { minute: number; team: "home" | "away"; type: string; detail: string; player: string | null }[] }) {
+  const icon = (type: string, detail: string) => {
+    if (type === "Goal") return "⚽";
+    if (type === "Card") return detail.includes("Yellow") ? "🟨" : "🟥";
+    if (type === "subst") return "🔄";
+    if (type === "Var") return "📺";
+    return "•";
+  };
+  return (
+    <div className="mt-5 border-t border-border/40 pt-4">
+      <div className="mb-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+        <span className="text-neon">▸</span> Timeline
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {events.slice(0, 24).map((e, i) => (
+          <div
+            key={i}
+            className={`flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] ${
+              e.team === "home"
+                ? "border-neon/30 bg-neon/5 text-neon"
+                : "border-magenta/30 bg-magenta/5 text-magenta"
+            }`}
+          >
+            <span className="font-mono">{e.minute}'</span>
+            <span>{icon(e.type, e.detail)}</span>
+            <span className="text-foreground/90">{e.player ?? e.detail}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
