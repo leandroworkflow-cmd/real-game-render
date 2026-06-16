@@ -6,8 +6,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getApiFootballDay, getApiFootballDetails } from "@/lib/apifootball.functions";
-import type { SDBEvent } from "@/lib/sportsdb.functions";
+import { getApiFootballDay, getApiFootballDetails } from "@/biblioteca/apifootball.functions";
+import type { SDBEvent } from "@/biblioteca/sportsdb.functions";
 
 // ── helpers ──────────────────────────────────────────────────
 function normalize(s: string) {
