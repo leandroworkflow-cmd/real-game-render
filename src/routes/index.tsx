@@ -4,6 +4,7 @@ import { useMemo, useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getMatches, getLineup, type SDBEvent } from "@/lib/sportsdb.functions";
 import { Field3D } from "@/components/Field3D";
+import { getApiFootballDay, getApiFootballDetails } from "@/lib/apifootball.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
