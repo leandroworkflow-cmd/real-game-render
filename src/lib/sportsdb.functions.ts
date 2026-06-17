@@ -1,95 +1,153 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-const SDB_BASE = "https://www.thesportsdb.com/api/v1/json/3";
+const BASE = "https://www.thesportsdb.com/api/v1/json/3";
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`TheSportsDB ${res.status}`);
+  return (await res.json()) as T;
+}
 
 export type SDBEvent = {
   idEvent: string;
-  idHomeTeam: string;
-  idAwayTeam: string;
   strEvent: string;
+  strLeague: string;
+  strLeagueBadge?: string | null;
   strHomeTeam: string;
   strAwayTeam: string;
-  strHomeTeamBadge: string | null;
-  strAwayTeamBadge: string | null;
+  idHomeTeam: string;
+  idAwayTeam: string;
+  strHomeTeamBadge?: string | null;
+  strAwayTeamBadge?: string | null;
   intHomeScore: string | null;
   intAwayScore: string | null;
-  strLeague: string;
-  strLeagueBadge: string | null;
-  strGroup: string | null;
-  strStatus: string | null;
-  strVenue: string | null;
-  strCountry: string | null;
-  strTimestamp: string;
   dateEvent: string;
+  strTime: string;
+  strStatus: string | null;
+  strVenue?: string | null;
+  strCountry?: string | null;
+  strThumb?: string | null;
+  strTimestamp: string;
+  strGroup?: string | null;
 };
-
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function mapEvent(r: any): SDBEvent {
-  return {
-    idEvent: String(r.idEvent),
-    idHomeTeam: String(r.idHomeTeam ?? ""),
-    idAwayTeam: String(r.idAwayTeam ?? ""),
-    strEvent: r.strEvent ?? "",
-    strHomeTeam: r.strHomeTeam ?? "",
-    strAwayTeam: r.strAwayTeam ?? "",
-    strHomeTeamBadge: r.strHomeTeamBadge ?? null,
-    strAwayTeamBadge: r.strAwayTeamBadge ?? null,
-    intHomeScore: r.intHomeScore !== null && r.intHomeScore !== undefined && r.intHomeScore !== "" ? String(r.intHomeScore) : null,
-    intAwayScore: r.intAwayScore !== null && r.intAwayScore !== undefined && r.intAwayScore !== "" ? String(r.intAwayScore) : null,
-    strLeague: r.strLeague ?? "",
-    strLeagueBadge: r.strLeagueBadge ?? null,
-    strGroup: r.strGroup ?? null,
-    strStatus: r.strStatus ?? null,
-    strVenue: r.strVenue ?? null,
-    strCountry: r.strCountry ?? null,
-    strTimestamp: r.strTimestamp ?? `${r.dateEvent ?? todayISO()}T${r.strTime ?? "00:00:00"}+00:00`,
-    dateEvent: r.dateEvent ?? todayISO(),
-  };
-}
-
-export const getMatches = createServerFn({ method: "GET" }).handler(async () => {
-  const date = todayISO();
-  const res = await fetch(`${SDB_BASE}/eventsday.php?d=${date}&s=Soccer`);
-  if (!res.ok) return { events: [] as SDBEvent[] };
-  const json = (await res.json()) as { events: any[] | null };
-  const events = (json.events ?? []).map(mapEvent);
-  return { events };
-});
 
 export type SDBPlayer = {
   idPlayer: string;
   strPlayer: string;
-  strNumber: string | null;
-  strPosition: string | null;
-  strCutout: string | null;
-  strThumb: string | null;
+  strPosition?: string | null;
+  strThumb?: string | null;
+  strCutout?: string | null;
+  strNumber?: string | null;
+  strNationality?: string | null;
 };
 
-async function fetchTeamPlayers(teamId: string): Promise<SDBPlayer[]> {
-  if (!teamId) return [];
-  const res = await fetch(`${SDB_BASE}/lookup_all_players.php?id=${teamId}`);
-  if (!res.ok) return [];
-  const json = (await res.json()) as { player: any[] | null };
-  return (json.player ?? []).slice(0, 11).map((p) => ({
-    idPlayer: String(p.idPlayer),
-    strPlayer: p.strPlayer ?? "",
-    strNumber: p.strNumber ?? null,
-    strPosition: p.strPosition ?? null,
-    strCutout: p.strCutout ?? null,
-    strThumb: p.strThumb ?? null,
-  }));
+function isoDate(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+export const getMatches = createServerFn({ method: "GET" }).handler(async () => {
+  const today = new Date();
+
+  // Busca 3 dias anteriores + hoje + 3 dias futuros para garantir sempre ter jogos
+  const deltas = [-3, -2, -1, 0, 1, 2, 3];
+  const days = deltas.map((delta) => {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() + delta);
+    return isoDate(d);
+  });
+
+  const results = await Promise.all(
+    days.map((d) =>
+      fetchJson<{ events: SDBEvent[] | null }>(
+        `${BASE}/eventsday.php?d=${d}&s=Soccer`,
+      ).catch(() => ({ events: null })),
+    ),
+  );
+
+  const all = results.flatMap((r) => r.events ?? []);
+
+  // Deduplicate by id
+  const map = new Map<string, SDBEvent>();
+  for (const e of all) map.set(e.idEvent, e);
+  const allEvents = Array.from(map.values());
+
+  // Prioridade: hoje > amanhã > ontem > outros
+  const todayStr = isoDate(today);
+  const todayEvents = allEvents.filter((e) => e.dateEvent === todayStr);
+
+  // Se tiver jogos de hoje, mostra só hoje
+  // Se não tiver, mostra os mais próximos
+  const events = (todayEvents.length > 0 ? todayEvents : allEvents)
+    .sort((a, b) => a.strTimestamp.localeCompare(b.strTimestamp));
+
+  return { events };
+});
+
+const POS_ORDER: Record<string, number> = {
+  Goalkeeper: 0,
+  Defender: 1,
+  Midfielder: 2,
+  Forward: 3,
+  Attacker: 3,
+};
+
+function posRank(pos?: string | null): number {
+  if (!pos) return 99;
+  for (const [key, rank] of Object.entries(POS_ORDER)) {
+    if (pos.toLowerCase().includes(key.toLowerCase())) return rank;
+  }
+  return 5;
+}
+
+function pick11(players: SDBPlayer[] | null): SDBPlayer[] {
+  if (!players || players.length === 0) return [];
+
+  const sorted = [...players].sort((a, b) => {
+    const pa = posRank(a.strPosition);
+    const pb = posRank(b.strPosition);
+    if (pa !== pb) return pa - pb;
+    const aHasPhoto = !!(a.strCutout || a.strThumb);
+    const bHasPhoto = !!(b.strCutout || b.strThumb);
+    if (aHasPhoto !== bHasPhoto) return aHasPhoto ? -1 : 1;
+    return 0;
+  });
+
+  const gk = sorted.filter((p) => posRank(p.strPosition) === 0).slice(0, 1);
+  const def = sorted.filter((p) => posRank(p.strPosition) === 1).slice(0, 4);
+  const mid = sorted.filter((p) => posRank(p.strPosition) === 2).slice(0, 3);
+  const fwd = sorted.filter((p) => posRank(p.strPosition) === 3).slice(0, 3);
+
+  const lineup = [...gk, ...def, ...mid, ...fwd];
+
+  if (lineup.length < 11) {
+    const used = new Set(lineup.map((p) => p.idPlayer));
+    const rest = sorted.filter((p) => !used.has(p.idPlayer));
+    lineup.push(...rest.slice(0, 11 - lineup.length));
+  }
+
+  return lineup.slice(0, 11);
 }
 
 export const getLineup = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ homeTeamId: z.string(), awayTeamId: z.string() }).parse)
+  .inputValidator(
+    z.object({
+      homeTeamId: z.string(),
+      awayTeamId: z.string(),
+    }),
+  )
   .handler(async ({ data }) => {
-    const [home, away] = await Promise.all([
-      fetchTeamPlayers(data.homeTeamId),
-      fetchTeamPlayers(data.awayTeamId),
+    const [homeRes, awayRes] = await Promise.all([
+      fetchJson<{ player: SDBPlayer[] | null }>(
+        `${BASE}/lookup_all_players.php?id=${data.homeTeamId}`,
+      ).catch(() => ({ player: null })),
+      fetchJson<{ player: SDBPlayer[] | null }>(
+        `${BASE}/lookup_all_players.php?id=${data.awayTeamId}`,
+      ).catch(() => ({ player: null })),
     ]);
-    return { home, away };
+
+    return {
+      home: pick11(homeRes.player),
+      away: pick11(awayRes.player),
+    };
   });
