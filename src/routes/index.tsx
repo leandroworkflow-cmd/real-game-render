@@ -50,7 +50,7 @@ function HomePage() {
     queryFn: () => getMatches(),
     refetchInterval: 15_000,
     refetchIntervalInBackground: true,
-    placeholderData: (prev) => prev, // mantém dados anteriores durante refetch
+    placeholderData: (prev) => prev,
   });
 
   const events = data?.events ?? [];
@@ -187,12 +187,10 @@ function MatchCard({ event }: { event: SDBEvent }) {
   );
 }
 
-// ── FieldCard: tries API-Football lineup first, falls back to SDB ──
 function FieldCard({ event }: { event: SDBEvent }) {
   const isLive = statusOf(event) === "LIVE";
   const date = event.dateEvent || event.strTimestamp.slice(0, 10);
 
-  // 1) Get fixture ID from API-Football
   const { data: day } = useQuery({
     queryKey: ["af-day", date],
     queryFn: () => getApiFootballDay({ data: { date } }),
@@ -207,7 +205,6 @@ function FieldCard({ event }: { event: SDBEvent }) {
     ) ?? null;
   }, [day, event.strHomeTeam, event.strAwayTeam]);
 
-  // 2) Get AF lineup (real formation + numbers + photos)
   const { data: afLineup, isLoading: afLoading } = useQuery({
     queryKey: ["af-lineup", fixture?.id],
     queryFn: () => getApiFootballLineup({ data: { fixtureId: fixture!.id } }),
@@ -215,7 +212,6 @@ function FieldCard({ event }: { event: SDBEvent }) {
     staleTime: 5 * 60_000,
   });
 
-  // 3) Fallback: SDB lineup
   const { data: sdbData, isLoading: sdbLoading } = useQuery({
     queryKey: ["lineup", event.idHomeTeam, event.idAwayTeam],
     queryFn: () => getLineup({ data: { homeTeamId: event.idHomeTeam, awayTeamId: event.idAwayTeam } }),
@@ -223,7 +219,6 @@ function FieldCard({ event }: { event: SDBEvent }) {
     enabled: !fixture || (!afLoading && !afLineup?.home),
   });
 
-  // 4) Resolve which lineup to use
   const { homePlayers, awayPlayers, formation, source } = useMemo(() => {
     if (afLineup?.home && afLineup.home.startXI.length > 0) {
       return {
@@ -276,25 +271,15 @@ function FieldCard({ event }: { event: SDBEvent }) {
       <div className="relative mt-2 aspect-[4/5] w-full overflow-hidden rounded-xl border border-border/60 bg-[radial-gradient(ellipse_at_center,oklch(0.22_0.06_160),oklch(0.1_0.03_180))]">
         <AnimatePresence>
           {isLoading && (
-            <motion.div
-              key="loader"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 flex items-center justify-center"
-            >
+            <motion.div key="loader" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 flex items-center justify-center">
               <div className="font-display text-xs uppercase tracking-[0.4em] text-neon">Carregando escalações…</div>
             </motion.div>
           )}
         </AnimatePresence>
         <Suspense fallback={null}>
           {hasData && (
-            <Field3D
-              key={`${event.idEvent}-${source}`}
-              home={homePlayers}
-              away={awayPlayers}
-              live={isLive}
-            />
+            <Field3D key={`${event.idEvent}-${source}`} home={homePlayers} away={awayPlayers} live={isLive} />
           )}
         </Suspense>
         <div className="pointer-events-none absolute left-3 top-3 rounded-md border border-neon/40 bg-neon/10 px-2 py-0.5 font-display text-[10px] uppercase tracking-widest text-neon">
@@ -309,7 +294,110 @@ function FieldCard({ event }: { event: SDBEvent }) {
         <span>Arraste · zoom · rotação automática</span>
         <span>{homePlayers.length} + {awayPlayers.length} titulares</span>
       </div>
+
+      {/* ── Lineup lists ── */}
+      {hasData && (
+        <div className="relative mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-4">
+          <LineupList players={homePlayers} name={event.strHomeTeam} badge={event.strHomeTeamBadge} side="home" />
+          <LineupList players={awayPlayers} name={event.strAwayTeam} badge={event.strAwayTeamBadge} side="away" />
+        </div>
+      )}
     </motion.div>
+  );
+}
+
+// ── LineupList ────────────────────────────────────────────────
+const POS_SECTION: Record<string, string> = {
+  G: "Goleiro", GK: "Goleiro",
+  D: "Defesa", CB: "Defesa", LB: "Defesa", RB: "Defesa", WB: "Defesa",
+  M: "Meio-campo", CM: "Meio-campo", DM: "Meio-campo", AM: "Meio-campo",
+  F: "Ataque", ST: "Ataque", LW: "Ataque", RW: "Ataque", CF: "Ataque",
+};
+
+function posSection(pos: string | null): string {
+  if (!pos) return "Campo";
+  return POS_SECTION[pos.toUpperCase()] ?? "Campo";
+}
+
+function posOrder(pos: string | null): number {
+  const s = posSection(pos);
+  if (s === "Goleiro") return 0;
+  if (s === "Defesa") return 1;
+  if (s === "Meio-campo") return 2;
+  if (s === "Ataque") return 3;
+  return 4;
+}
+
+function LineupList({ players, name, badge, side }: {
+  players: FieldPlayer[];
+  name: string;
+  badge?: string | null;
+  side: "home" | "away";
+}) {
+  const isHome = side === "home";
+  const color = isHome ? "text-neon" : "text-magenta";
+  const borderCard = isHome ? "border-neon/20" : "border-magenta/20";
+  const bgCard = isHome ? "bg-neon/5" : "bg-magenta/5";
+  const numColor = isHome ? "text-neon" : "text-magenta";
+
+  const sorted = [...players].sort((a, b) => posOrder(a.pos) - posOrder(b.pos));
+
+  // Group by section
+  const sections: { label: string; items: FieldPlayer[] }[] = [];
+  for (const p of sorted) {
+    const label = posSection(p.pos);
+    const last = sections[sections.length - 1];
+    if (last && last.label === label) {
+      last.items.push(p);
+    } else {
+      sections.push({ label, items: [p] });
+    }
+  }
+
+  return (
+    <div>
+      {/* Team header */}
+      <div className={`mb-3 flex items-center gap-2 ${isHome ? "" : "flex-row-reverse"}`}>
+        {badge && <img src={badge} alt={name} className="h-5 w-5 object-contain" />}
+        <span className={`text-[10px] uppercase tracking-[0.3em] font-semibold truncate ${color}`}>
+          {name}
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {sections.map((sec) => (
+          <div key={sec.label}>
+            {/* Section label */}
+            <div className="mb-1 text-[9px] uppercase tracking-[0.3em] text-muted-foreground/60">
+              {sec.label}
+            </div>
+            <div className="space-y-1">
+              {sec.items.map((p) => (
+                <div
+                  key={p.id}
+                  className={`flex items-center gap-2 rounded-lg border ${borderCard} ${bgCard} px-2 py-1.5 transition-colors hover:bg-card/60`}
+                >
+                  {/* Number */}
+                  <span className={`w-5 shrink-0 text-center font-mono text-[11px] font-bold ${numColor}`}>
+                    {p.number ?? "—"}
+                  </span>
+                  {/* Name */}
+                  <span className="flex-1 truncate text-[11px] text-foreground/90">
+                    {p.name.trim().split(" ").slice(-1)[0]}
+                  </span>
+                  {/* Position badge */}
+                  {p.pos && (
+                    <span className={`shrink-0 rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider ${isHome ? "bg-neon/15 text-neon" : "bg-magenta/15 text-magenta"}`}>
+                      {p.pos}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
