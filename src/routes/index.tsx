@@ -53,6 +53,7 @@ function HomePage() {
     queryFn: () => getMatches(),
     refetchInterval: 15_000,
     refetchIntervalInBackground: true,
+    placeholderData: (prev) => prev, // mantém dados anteriores durante refetch
   });
 
   const events = data?.events ?? [];
@@ -71,6 +72,7 @@ function HomePage() {
       <main className="mx-auto max-w-[1500px] px-4 pb-16 pt-6 lg:px-8">
         {isLoading && <SkeletonHero />}
         {!isLoading && selected && <FeaturedBlock event={selected} />}
+        {!isLoading && !selected && <EmptyState />}
         <section className="mt-10">
           <SectionTitle title="PARTIDAS // TODAY">
             <span className="text-muted-foreground">{events.length} eventos</span>
@@ -418,6 +420,28 @@ function TeamRow({ name, badge, score }: { name: string; badge?: string | null; 
         <span className="truncate text-sm">{name}</span>
       </div>
       <span className="font-display text-sm font-semibold">{score ?? "–"}</span>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center py-24 text-center">
+      <div className="relative mb-6 h-20 w-20">
+        <div className="absolute inset-0 rounded-full bg-neon/10 animate-pulse" />
+        <div className="absolute inset-3 rounded-full bg-neon/20" />
+        <div className="absolute inset-0 flex items-center justify-center text-4xl">⚽</div>
+      </div>
+      <div className="font-display text-sm uppercase tracking-[0.4em] text-neon mb-2">
+        Aguardando partidas
+      </div>
+      <div className="text-xs text-muted-foreground max-w-xs">
+        A TheSportsDB ainda não publicou os jogos de hoje. O painel atualiza automaticamente a cada 15 segundos.
+      </div>
+      <div className="mt-6 flex items-center gap-2 text-[10px] text-muted-foreground">
+        <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-neon animate-pulse" />
+        Sincronizando…
+      </div>
     </div>
   );
 }
