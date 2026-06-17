@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicImgRouteImport } from './routes/api/public/img'
 import { Route as ApiPublicPlayerPhotoIdRouteImport } from './routes/api/public/player-photo.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicImgRoute = ApiPublicImgRouteImport.update({
+  id: '/api/public/img',
+  path: '/api/public/img',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicPlayerPhotoIdRoute = ApiPublicPlayerPhotoIdRouteImport.update({
@@ -25,27 +31,31 @@ const ApiPublicPlayerPhotoIdRoute = ApiPublicPlayerPhotoIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/public/img': typeof ApiPublicImgRoute
   '/api/public/player-photo/$id': typeof ApiPublicPlayerPhotoIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/public/img': typeof ApiPublicImgRoute
   '/api/public/player-photo/$id': typeof ApiPublicPlayerPhotoIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/public/img': typeof ApiPublicImgRoute
   '/api/public/player-photo/$id': typeof ApiPublicPlayerPhotoIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/public/player-photo/$id'
+  fullPaths: '/' | '/api/public/img' | '/api/public/player-photo/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/public/player-photo/$id'
-  id: '__root__' | '/' | '/api/public/player-photo/$id'
+  to: '/' | '/api/public/img' | '/api/public/player-photo/$id'
+  id: '__root__' | '/' | '/api/public/img' | '/api/public/player-photo/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiPublicImgRoute: typeof ApiPublicImgRoute
   ApiPublicPlayerPhotoIdRoute: typeof ApiPublicPlayerPhotoIdRoute
 }
 
@@ -56,6 +66,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/img': {
+      id: '/api/public/img'
+      path: '/api/public/img'
+      fullPath: '/api/public/img'
+      preLoaderRoute: typeof ApiPublicImgRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/player-photo/$id': {
@@ -70,6 +87,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiPublicImgRoute: ApiPublicImgRoute,
   ApiPublicPlayerPhotoIdRoute: ApiPublicPlayerPhotoIdRoute,
 }
 export const routeTree = rootRouteImport

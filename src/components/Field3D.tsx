@@ -22,7 +22,11 @@ export function sdbToField(p: SDBPlayer): FieldPlayer {
     name: p.strPlayer,
     number: p.strNumber ?? null,
     pos: p.strPosition ?? null,
-    photo: p.strCutout || p.strThumb || null,
+    photo: p.strCutout
+      ? `/api/public/img?u=${encodeURIComponent(p.strCutout)}`
+      : p.strThumb
+        ? `/api/public/img?u=${encodeURIComponent(p.strThumb)}`
+        : null,
     grid: null,
   };
 }
