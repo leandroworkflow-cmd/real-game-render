@@ -12,8 +12,8 @@ export type SDBEvent = {
   strAwayTeam: string;
   strHomeTeamBadge: string | null;
   strAwayTeamBadge: string | null;
-  intHomeScore: number | null;
-  intAwayScore: number | null;
+  intHomeScore: string | null;
+  intAwayScore: string | null;
   strLeague: string;
   strLeagueBadge: string | null;
   strGroup: string | null;
