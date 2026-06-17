@@ -3,8 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getMatches, getLineup, type SDBEvent } from "@/lib/sportsdb.functions";
-import { Field3D } from "@/components/Field3D";
+import { Field3D, sdbToField, afToField, type FieldPlayer } from "@/components/Field3D";
 import { StatsPanel } from "@/components/StatsPanel";
+import {
+  getApiFootballDay,
+  getApiFootballLineup,
+} from "@/lib/apifootball.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -31,6 +35,18 @@ function statusOf(e: SDBEvent): "LIVE" | "FT" | "NS" {
   return "NS";
 }
 
+function normalize(s: string) {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+}
+
+function teamMatch(a: string, b: string) {
+  const na = normalize(a), nb = normalize(b);
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  const ta = new Set(na.match(/.{3,}/g) ?? []);
+  return Array.from(ta).some((t) => nb.includes(t));
+}
+
 function HomePage() {
   const { data, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ["matches"],
@@ -42,7 +58,6 @@ function HomePage() {
   const events = data?.events ?? [];
   const live = useMemo(() => events.filter((e) => statusOf(e) === "LIVE"), [events]);
   const finished = useMemo(() => events.filter((e) => statusOf(e) === "FT"), [events]);
-
   const featured = live[0] ?? events.find((e) => statusOf(e) === "NS") ?? finished[finished.length - 1];
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = useMemo(
@@ -55,10 +70,7 @@ function HomePage() {
       <Header liveCount={live.length} total={events.length} lastUpdate={dataUpdatedAt} />
       <main className="mx-auto max-w-[1500px] px-4 pb-16 pt-6 lg:px-8">
         {isLoading && <SkeletonHero />}
-        {!isLoading && selected && (
-          <FeaturedBlock event={selected} />
-        )}
-
+        {!isLoading && selected && <FeaturedBlock event={selected} />}
         <section className="mt-10">
           <SectionTitle title="PARTIDAS // TODAY">
             <span className="text-muted-foreground">{events.length} eventos</span>
@@ -93,20 +105,14 @@ function Header({ liveCount, total, lastUpdate }: { liveCount: number; total: nu
             <div className="absolute inset-0 flex items-center justify-center font-display text-sm font-bold text-neon">N</div>
           </div>
           <div>
-            <div className="font-display text-base font-semibold tracking-tight">
-              NEFRA<span className="text-neon">.</span>SPORTS
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-              Live Analytics // v2026
-            </div>
+            <div className="font-display text-base font-semibold tracking-tight">NEFRA<span className="text-neon">.</span>SPORTS</div>
+            <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Live Analytics // v2026</div>
           </div>
         </div>
         <div className="flex items-center gap-4 text-xs">
           <div className="hidden items-center gap-2 sm:flex">
             <span className="live-dot inline-block h-2 w-2 rounded-full bg-neon" />
-            <span className="text-muted-foreground">
-              <span className="text-neon">{liveCount}</span> ao vivo · {total} hoje
-            </span>
+            <span className="text-muted-foreground"><span className="text-neon">{liveCount}</span> ao vivo · {total} hoje</span>
           </div>
           <div className="rounded-md border border-border bg-card/60 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             <span className="text-neon">●</span> SYNC {lastUpdate ? new Date(lastUpdate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "…"}
@@ -147,23 +153,16 @@ function MatchCard({ event }: { event: SDBEvent }) {
   const away = event.intAwayScore ?? "-";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="card-glass relative overflow-hidden rounded-2xl p-6"
-    >
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card-glass relative overflow-hidden rounded-2xl p-6">
       <div className="grid-bg absolute inset-0 opacity-40" />
       <div className="relative">
         <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
           <span className="flex items-center gap-2">
-            {event.strLeagueBadge && (
-              <img src={event.strLeagueBadge} alt="" className="h-4 w-4 object-contain" />
-            )}
+            {event.strLeagueBadge && <img src={event.strLeagueBadge} alt="" className="h-4 w-4 object-contain" />}
             {event.strLeague}{event.strGroup ? ` · Grupo ${event.strGroup}` : ""}
           </span>
           <StatusBadge status={status} minute={minute} timestamp={event.strTimestamp} />
         </div>
-
         <div className="mt-8 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
           <TeamBlock name={event.strHomeTeam} badge={event.strHomeTeamBadge} side="home" />
           <div className="text-center">
@@ -178,9 +177,7 @@ function MatchCard({ event }: { event: SDBEvent }) {
           </div>
           <TeamBlock name={event.strAwayTeam} badge={event.strAwayTeamBadge} side="away" />
         </div>
-
         <ProbabilityBar event={event} />
-
         <div className="mt-6 grid grid-cols-3 gap-3 border-t border-border/40 pt-4 text-center">
           <Stat label="Estádio" value={event.strVenue ?? "—"} />
           <Stat label="Local" value={event.strCountry ?? "—"} />
@@ -191,23 +188,144 @@ function MatchCard({ event }: { event: SDBEvent }) {
   );
 }
 
+// ── FieldCard: tries API-Football lineup first, falls back to SDB ──
+function FieldCard({ event }: { event: SDBEvent }) {
+  const isLive = statusOf(event) === "LIVE";
+  const date = event.dateEvent || event.strTimestamp.slice(0, 10);
+
+  // 1) Get fixture ID from API-Football
+  const { data: day } = useQuery({
+    queryKey: ["af-day", date],
+    queryFn: () => getApiFootballDay({ data: { date } }),
+    staleTime: 10 * 60_000,
+    retry: 1,
+  });
+
+  const fixture = useMemo(() => {
+    if (!day) return null;
+    return day.fixtures.find(
+      (f) => teamMatch(f.homeName, event.strHomeTeam) && teamMatch(f.awayName, event.strAwayTeam),
+    ) ?? null;
+  }, [day, event.strHomeTeam, event.strAwayTeam]);
+
+  // 2) Get AF lineup (real formation + numbers + photos)
+  const { data: afLineup, isLoading: afLoading } = useQuery({
+    queryKey: ["af-lineup", fixture?.id],
+    queryFn: () => getApiFootballLineup({ data: { fixtureId: fixture!.id } }),
+    enabled: !!fixture,
+    staleTime: 5 * 60_000,
+  });
+
+  // 3) Fallback: SDB lineup
+  const { data: sdbData, isLoading: sdbLoading } = useQuery({
+    queryKey: ["lineup", event.idHomeTeam, event.idAwayTeam],
+    queryFn: () => getLineup({ data: { homeTeamId: event.idHomeTeam, awayTeamId: event.idAwayTeam } }),
+    staleTime: 5 * 60_000,
+    enabled: !fixture || (!afLoading && !afLineup?.home),
+  });
+
+  // 4) Resolve which lineup to use
+  const { homePlayers, awayPlayers, formation, source } = useMemo(() => {
+    if (afLineup?.home && afLineup.home.startXI.length > 0) {
+      return {
+        homePlayers: afLineup.home.startXI.map(afToField),
+        awayPlayers: (afLineup.away?.startXI ?? []).map(afToField),
+        formation: afLineup.home.formation ?? null,
+        source: "API-Football",
+      };
+    }
+    if (sdbData) {
+      return {
+        homePlayers: sdbData.home.map(sdbToField),
+        awayPlayers: sdbData.away.map(sdbToField),
+        formation: null,
+        source: "TheSportsDB",
+      };
+    }
+    return { homePlayers: [], awayPlayers: [], formation: null, source: null };
+  }, [afLineup, sdbData]);
+
+  const isLoading = afLoading || sdbLoading;
+  const hasData = homePlayers.length > 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.05 }}
+      className="card-glass relative overflow-hidden rounded-2xl p-4"
+    >
+      <div className="grid-bg absolute inset-0 opacity-40" />
+      <div className="relative flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+        <span>
+          <span className="text-neon">CAMPO 3D</span>
+          {formation && <span className="ml-2 text-neon/70">· {formation}</span>}
+          {source && <span className="ml-1 text-muted-foreground/60">· {source}</span>}
+        </span>
+        <div className="flex items-center gap-3">
+          {isLive && (
+            <span className="flex items-center gap-1 rounded-full bg-neon/15 px-2 py-0.5 text-[9px] text-neon">
+              <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-neon" />
+              MOV. LIVE
+            </span>
+          )}
+          <LegendDot color="bg-neon" label={event.strHomeTeam} />
+          <LegendDot color="bg-magenta" label={event.strAwayTeam} />
+        </div>
+      </div>
+
+      <div className="relative mt-2 aspect-[4/5] w-full overflow-hidden rounded-xl border border-border/60 bg-[radial-gradient(ellipse_at_center,oklch(0.22_0.06_160),oklch(0.1_0.03_180))]">
+        <AnimatePresence>
+          {isLoading && (
+            <motion.div
+              key="loader"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 flex items-center justify-center"
+            >
+              <div className="font-display text-xs uppercase tracking-[0.4em] text-neon">Carregando escalações…</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <Suspense fallback={null}>
+          {hasData && (
+            <Field3D
+              key={`${event.idEvent}-${source}`}
+              home={homePlayers}
+              away={awayPlayers}
+              live={isLive}
+            />
+          )}
+        </Suspense>
+        <div className="pointer-events-none absolute left-3 top-3 rounded-md border border-neon/40 bg-neon/10 px-2 py-0.5 font-display text-[10px] uppercase tracking-widest text-neon">
+          {event.strHomeTeam}
+        </div>
+        <div className="pointer-events-none absolute right-3 bottom-3 rounded-md border border-magenta/40 bg-magenta/10 px-2 py-0.5 font-display text-[10px] uppercase tracking-widest text-magenta">
+          {event.strAwayTeam}
+        </div>
+      </div>
+
+      <div className="relative mt-3 flex items-center justify-between text-[10px] text-muted-foreground">
+        <span>Arraste · zoom · rotação automática</span>
+        <span>{homePlayers.length} + {awayPlayers.length} titulares</span>
+      </div>
+    </motion.div>
+  );
+}
+
 function TeamBlock({ name, badge, side }: { name: string; badge?: string | null; side: "home" | "away" }) {
   return (
     <div className={`flex items-center gap-3 ${side === "away" ? "flex-row-reverse text-right" : ""}`}>
       <div className="relative h-14 w-14 shrink-0 rounded-xl border border-border bg-card/60 p-1.5">
-        {badge ? (
-          <img src={badge} alt={name} className="h-full w-full object-contain" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center font-display text-lg text-muted-foreground">
-            {name[0]}
-          </div>
-        )}
+        {badge
+          ? <img src={badge} alt={name} className="h-full w-full object-contain" />
+          : <div className="flex h-full w-full items-center justify-center font-display text-lg text-muted-foreground">{name[0]}</div>
+        }
       </div>
       <div className="min-w-0">
         <div className="truncate font-display text-base font-semibold">{name}</div>
-        <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-          {side === "home" ? "CASA" : "FORA"}
-        </div>
+        <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">{side === "home" ? "CASA" : "FORA"}</div>
       </div>
     </div>
   );
@@ -222,9 +340,7 @@ function StatusBadge({ status, minute, timestamp }: { status: "LIVE" | "FT" | "N
       </span>
     );
   }
-  if (status === "FT") {
-    return <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest">FT</span>;
-  }
+  if (status === "FT") return <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest">FT</span>;
   return <span className="rounded-full border border-border bg-card/60 px-2.5 py-1 text-[10px] uppercase tracking-widest">{fmtTime(timestamp)}</span>;
 }
 
@@ -263,78 +379,6 @@ function ProbabilityBar({ event }: { event: SDBEvent }) {
   );
 }
 
-function FieldCard({ event }: { event: SDBEvent }) {
-  const isLive = statusOf(event) === "LIVE";
-  const { data, isLoading } = useQuery({
-    queryKey: ["lineup", event.idHomeTeam, event.idAwayTeam],
-    queryFn: () => getLineup({ data: { homeTeamId: event.idHomeTeam, awayTeamId: event.idAwayTeam } }),
-    staleTime: 5 * 60_000,
-  });
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.05 }}
-      className="card-glass relative overflow-hidden rounded-2xl p-4"
-    >
-      <div className="grid-bg absolute inset-0 opacity-40" />
-      <div className="relative flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-        <span>
-          <span className="text-neon">CAMPO 3D</span> · Escalação real · TheSportsDB
-        </span>
-        <div className="flex items-center gap-3">
-          {isLive && (
-            <span className="flex items-center gap-1 rounded-full bg-neon/15 px-2 py-0.5 text-[9px] text-neon">
-              <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-neon" />
-              MOV. LIVE
-            </span>
-          )}
-          <LegendDot color="bg-neon" label={event.strHomeTeam} />
-          <LegendDot color="bg-magenta" label={event.strAwayTeam} />
-        </div>
-      </div>
-      <div className="relative mt-2 aspect-[4/5] w-full overflow-hidden rounded-xl border border-border/60 bg-[radial-gradient(ellipse_at_center,oklch(0.22_0.06_160),oklch(0.1_0.03_180))]">
-        <AnimatePresence>
-          {isLoading && (
-            <motion.div
-              key="loader"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 flex items-center justify-center"
-            >
-              <div className="font-display text-xs uppercase tracking-[0.4em] text-neon">Carregando escalações…</div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <Suspense fallback={null}>
-          {data && (
-            <Field3D
-              key={`${event.idHomeTeam}-${event.idAwayTeam}`}
-              home={data.home}
-              away={data.away}
-              live={isLive}
-            />
-          )}
-        </Suspense>
-        <div className="pointer-events-none absolute left-3 top-3 rounded-md border border-neon/40 bg-neon/10 px-2 py-0.5 font-display text-[10px] uppercase tracking-widest text-neon">
-          {event.strHomeTeam}
-        </div>
-        <div className="pointer-events-none absolute right-3 bottom-3 rounded-md border border-magenta/40 bg-magenta/10 px-2 py-0.5 font-display text-[10px] uppercase tracking-widest text-magenta">
-          {event.strAwayTeam}
-        </div>
-      </div>
-      <div className="relative mt-3 flex items-center justify-between text-[10px] text-muted-foreground">
-        <span>Arraste · zoom · rotação automática</span>
-        <span>
-          {data?.home.length ?? 0} + {data?.away.length ?? 0} titulares
-        </span>
-      </div>
-    </motion.div>
-  );
-}
-
 function LegendDot({ color, label }: { color: string; label: string }) {
   return (
     <span className="flex items-center gap-1.5">
@@ -349,9 +393,7 @@ function MatchTile({ event, active, onSelect }: { event: SDBEvent; active: boole
   return (
     <button
       onClick={onSelect}
-      className={`card-glass group relative overflow-hidden rounded-xl p-4 text-left transition-all hover:-translate-y-0.5 ${
-        active ? "glow-border" : ""
-      }`}
+      className={`card-glass group relative overflow-hidden rounded-xl p-4 text-left transition-all hover:-translate-y-0.5 ${active ? "glow-border" : ""}`}
     >
       <div className="flex items-center justify-between text-[9px] uppercase tracking-[0.3em] text-muted-foreground">
         <span className="truncate">{event.strLeague}</span>
@@ -369,11 +411,10 @@ function TeamRow({ name, badge, score }: { name: string; badge?: string | null; 
   return (
     <div className="flex items-center justify-between gap-2">
       <div className="flex min-w-0 items-center gap-2">
-        {badge ? (
-          <img src={badge} alt="" className="h-5 w-5 object-contain" />
-        ) : (
-          <div className="h-5 w-5 rounded-sm bg-muted" />
-        )}
+        {badge
+          ? <img src={badge} alt="" className="h-5 w-5 object-contain" />
+          : <div className="h-5 w-5 rounded-sm bg-muted" />
+        }
         <span className="truncate text-sm">{name}</span>
       </div>
       <span className="font-display text-sm font-semibold">{score ?? "–"}</span>
@@ -402,8 +443,7 @@ function useMatchMinute(event: SDBEvent, live: boolean): number | null {
     const start = Date.parse(event.strTimestamp);
     if (Number.isNaN(start)) return null;
     const mins = Math.floor((Date.now() - start) / 60_000);
-    if (mins < 0) return null;
-    if (mins > 120) return null;
+    if (mins < 0 || mins > 120) return null;
     return Math.min(95, mins);
   }, [event.strTimestamp, live]);
 }
