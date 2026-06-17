@@ -5,8 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { getMatches, getLineup, type SDBEvent } from "@/lib/sportsdb.functions";
 import { Field3D, sdbToField, afToField, type FieldPlayer } from "@/components/Field3D";
 import { StatsPanel } from "@/components/StatsPanel";
-import { getApiFootballDay } from "@/lib/apifootball.functions";
-import { getApiFootballLineup } from "@/lib/sportsdb.functions";
+import { getApiFootballDay, getApiFootballLineup } from "@/lib/apifootball.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
