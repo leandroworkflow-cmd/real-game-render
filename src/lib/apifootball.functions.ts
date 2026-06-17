@@ -82,6 +82,32 @@ export type AFPlayerRating = {
   redCards: number;
 };
 
+export type AFLineupResult = { home: AFLineup | null; away: AFLineup | null };
+
+export const getApiFootballLineup = createServerFn({ method: "GET" })
+  .inputValidator(z.object({ fixtureId: z.number() }).parse)
+  .handler(async ({ data }): Promise<AFLineupResult> => {
+    const json = await af<{ response: any[] }>(`/fixtures/lineups?fixture=${data.fixtureId}`);
+    const teams = json.response ?? [];
+    if (teams.length < 2) return { home: null, away: null };
+    const parse = (t: any): AFLineup => ({
+      teamId: t.team.id,
+      teamName: t.team.name,
+      teamLogo: t.team.logo,
+      formation: t.formation ?? null,
+      coach: t.coach ? { name: t.coach.name, photo: t.coach.photo ?? null } : null,
+      startXI: (t.startXI ?? []).map((p: any) => ({
+        id: p.player.id,
+        name: p.player.name,
+        number: p.player.number ?? null,
+        pos: p.player.pos ?? null,
+        grid: p.player.grid ?? null,
+        photo: `https://media.api-sports.io/football/players/${p.player.id}.png`,
+      })),
+    });
+    return { home: parse(teams[0]), away: parse(teams[1]) };
+  });
+
 export const getApiFootballDetails = createServerFn({ method: "GET" })
   .inputValidator(z.object({ fixtureId: z.number() }).parse)
   .handler(async ({ data }) => {

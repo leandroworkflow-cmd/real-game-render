@@ -1,196 +1,95 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-const BASE = "https://v3.football.api-sports.io";
+const SDB_BASE = "https://www.thesportsdb.com/api/v1/json/3";
 
-function headers() {
-  const key = process.env.API_FOOTBALL_KEY;
-  if (!key) throw new Error("API_FOOTBALL_KEY missing");
-  return { "x-apisports-key": key } as Record<string, string>;
+export type SDBEvent = {
+  idEvent: string;
+  idHomeTeam: string;
+  idAwayTeam: string;
+  strEvent: string;
+  strHomeTeam: string;
+  strAwayTeam: string;
+  strHomeTeamBadge: string | null;
+  strAwayTeamBadge: string | null;
+  intHomeScore: string | null;
+  intAwayScore: string | null;
+  strLeague: string;
+  strLeagueBadge: string | null;
+  strGroup: string | null;
+  strStatus: string | null;
+  strVenue: string | null;
+  strCountry: string | null;
+  strTimestamp: string;
+  dateEvent: string;
+};
+
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
-async function af<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { headers: headers() });
-  if (!res.ok) throw new Error(`API-Football ${res.status}`);
-  return (await res.json()) as T;
+function mapEvent(r: any): SDBEvent {
+  return {
+    idEvent: String(r.idEvent),
+    idHomeTeam: String(r.idHomeTeam ?? ""),
+    idAwayTeam: String(r.idAwayTeam ?? ""),
+    strEvent: r.strEvent ?? "",
+    strHomeTeam: r.strHomeTeam ?? "",
+    strAwayTeam: r.strAwayTeam ?? "",
+    strHomeTeamBadge: r.strHomeTeamBadge ?? null,
+    strAwayTeamBadge: r.strAwayTeamBadge ?? null,
+    intHomeScore: r.intHomeScore !== null && r.intHomeScore !== undefined && r.intHomeScore !== "" ? String(r.intHomeScore) : null,
+    intAwayScore: r.intAwayScore !== null && r.intAwayScore !== undefined && r.intAwayScore !== "" ? String(r.intAwayScore) : null,
+    strLeague: r.strLeague ?? "",
+    strLeagueBadge: r.strLeagueBadge ?? null,
+    strGroup: r.strGroup ?? null,
+    strStatus: r.strStatus ?? null,
+    strVenue: r.strVenue ?? null,
+    strCountry: r.strCountry ?? null,
+    strTimestamp: r.strTimestamp ?? `${r.dateEvent ?? todayISO()}T${r.strTime ?? "00:00:00"}+00:00`,
+    dateEvent: r.dateEvent ?? todayISO(),
+  };
 }
 
-export type AFFixtureLite = {
-  id: number;
-  date: string;
-  homeName: string;
-  awayName: string;
-  homeId: number;
-  awayId: number;
+export const getMatches = createServerFn({ method: "GET" }).handler(async () => {
+  const date = todayISO();
+  const res = await fetch(`${SDB_BASE}/eventsday.php?d=${date}&s=Soccer`);
+  if (!res.ok) return { events: [] as SDBEvent[] };
+  const json = (await res.json()) as { events: any[] | null };
+  const events = (json.events ?? []).map(mapEvent);
+  return { events };
+});
+
+export type SDBPlayer = {
+  idPlayer: string;
+  strPlayer: string;
+  strNumber: string | null;
+  strPosition: string | null;
+  strCutout: string | null;
+  strThumb: string | null;
 };
 
-export const getApiFootballDay = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ date: z.string() }).parse)
+async function fetchTeamPlayers(teamId: string): Promise<SDBPlayer[]> {
+  if (!teamId) return [];
+  const res = await fetch(`${SDB_BASE}/lookup_all_players.php?id=${teamId}`);
+  if (!res.ok) return [];
+  const json = (await res.json()) as { player: any[] | null };
+  return (json.player ?? []).slice(0, 11).map((p) => ({
+    idPlayer: String(p.idPlayer),
+    strPlayer: p.strPlayer ?? "",
+    strNumber: p.strNumber ?? null,
+    strPosition: p.strPosition ?? null,
+    strCutout: p.strCutout ?? null,
+    strThumb: p.strThumb ?? null,
+  }));
+}
+
+export const getLineup = createServerFn({ method: "GET" })
+  .inputValidator(z.object({ homeTeamId: z.string(), awayTeamId: z.string() }).parse)
   .handler(async ({ data }) => {
-    const json = await af<{ response: any[] }>(`/fixtures?date=${data.date}`);
-    const fixtures: AFFixtureLite[] = (json.response ?? []).map((r) => ({
-      id: r.fixture.id,
-      date: r.fixture.date,
-      homeName: r.teams.home.name,
-      awayName: r.teams.away.name,
-      homeId: r.teams.home.id,
-      awayId: r.teams.away.id,
-    }));
-    return { fixtures };
-  });
-
-export type AFLineupPlayer = {
-  id: number;
-  name: string;
-  number: number | null;
-  pos: string | null;
-  grid: string | null;
-  photo: string;
-};
-
-export type AFLineup = {
-  teamId: number;
-  teamName: string;
-  teamLogo: string;
-  formation: string | null;
-  coach: { name: string; photo: string | null } | null;
-  startXI: AFLineupPlayer[];
-};
-
-export type AFStat = { type: string; home: string | number | null; away: string | number | null };
-
-export type AFEvent = {
-  minute: number;
-  team: "home" | "away";
-  type: string;
-  detail: string;
-  player: string | null;
-  assist: string | null;
-};
-
-export type AFPlayerRating = {
-  id: number;
-  name: string;
-  photo: string;
-  teamId: number;
-  rating: number | null;
-  goals: number;
-  assists: number;
-  shotsOnGoal: number;
-  yellowCards: number;
-  redCards: number;
-};
-
-// ── NEW: lineup by fixture id ─────────────────────────────────
-export type AFLineupResult = {
-  home: AFLineup | null;
-  away: AFLineup | null;
-};
-
-export const getApiFootballLineup = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ fixtureId: z.number() }).parse)
-  .handler(async ({ data }): Promise<AFLineupResult> => {
-    const json = await af<{ response: any[] }>(`/fixtures/lineups?fixture=${data.fixtureId}`);
-    const teams = json.response ?? [];
-    if (teams.length < 2) return { home: null, away: null };
-
-    const parse = (t: any): AFLineup => ({
-      teamId: t.team.id,
-      teamName: t.team.name,
-      teamLogo: t.team.logo,
-      formation: t.formation ?? null,
-      coach: t.coach ? { name: t.coach.name, photo: t.coach.photo ?? null } : null,
-      startXI: (t.startXI ?? []).map((p: any) => ({
-        id: p.player.id,
-        name: p.player.name,
-        number: p.player.number ?? null,
-        pos: p.player.pos ?? null,
-        grid: p.player.grid ?? null,
-        photo: `https://media.api-sports.io/football/players/${p.player.id}.png`,
-      })),
-    });
-
-    return {
-      home: parse(teams[0]),
-      away: parse(teams[1]),
-    };
-  });
-
-export const getApiFootballDetails = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ fixtureId: z.number() }).parse)
-  .handler(async ({ data }) => {
-    const id = data.fixtureId;
-    const [lineupsJson, statsJson, eventsJson, playersJson] = await Promise.all([
-      af<{ response: any[] }>(`/fixtures/lineups?fixture=${id}`),
-      af<{ response: any[] }>(`/fixtures/statistics?fixture=${id}`),
-      af<{ response: any[] }>(`/fixtures/events?fixture=${id}`),
-      af<{ response: any[] }>(`/fixtures/players?fixture=${id}`),
+    const [home, away] = await Promise.all([
+      fetchTeamPlayers(data.homeTeamId),
+      fetchTeamPlayers(data.awayTeamId),
     ]);
-
-    const lineups: AFLineup[] = (lineupsJson.response ?? []).map((l) => ({
-      teamId: l.team.id,
-      teamName: l.team.name,
-      teamLogo: l.team.logo,
-      formation: l.formation ?? null,
-      coach: l.coach ? { name: l.coach.name, photo: l.coach.photo ?? null } : null,
-      startXI: (l.startXI ?? []).map((p: any) => ({
-        id: p.player.id,
-        name: p.player.name,
-        number: p.player.number ?? null,
-        pos: p.player.pos ?? null,
-        grid: p.player.grid ?? null,
-        photo: `https://media.api-sports.io/football/players/${p.player.id}.png`,
-      })),
-    }));
-
-    const teamsStats = statsJson.response ?? [];
-    const statTypes = new Set<string>();
-    for (const t of teamsStats) for (const s of t.statistics ?? []) statTypes.add(s.type);
-    const stats: AFStat[] = Array.from(statTypes).map((type) => {
-      const home = teamsStats[0]?.statistics?.find((s: any) => s.type === type)?.value ?? null;
-      const away = teamsStats[1]?.statistics?.find((s: any) => s.type === type)?.value ?? null;
-      return { type, home, away };
-    });
-
-    const events: AFEvent[] = (eventsJson.response ?? []).map((e: any) => ({
-      minute: e.time?.elapsed ?? 0,
-      team: e.team?.id === teamsStats[0]?.team?.id ? "home" : "away",
-      type: e.type,
-      detail: e.detail,
-      player: e.player?.name ?? null,
-      assist: e.assist?.name ?? null,
-    }));
-
-    const allRatings: AFPlayerRating[] = [];
-    for (const teamBlock of playersJson.response ?? []) {
-      const teamId = teamBlock.team?.id;
-      for (const p of teamBlock.players ?? []) {
-        const s = p.statistics?.[0] ?? {};
-        const rating = s.games?.rating ? parseFloat(s.games.rating) : null;
-        allRatings.push({
-          id: p.player.id,
-          name: p.player.name,
-          photo: `https://media.api-sports.io/football/players/${p.player.id}.png`,
-          teamId,
-          rating,
-          goals: s.goals?.total ?? 0,
-          assists: s.goals?.assists ?? 0,
-          shotsOnGoal: s.shots?.on ?? 0,
-          yellowCards: s.cards?.yellow ?? 0,
-          redCards: s.cards?.red ?? 0,
-        });
-      }
-    }
-    const motm = [...allRatings]
-      .filter((p) => p.rating !== null)
-      .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))[0] ?? null;
-
-    return {
-      lineups,
-      stats,
-      events,
-      motm,
-      homeTeamId: teamsStats[0]?.team?.id ?? null,
-      awayTeamId: teamsStats[1]?.team?.id ?? null,
-    };
+    return { home, away };
   });
