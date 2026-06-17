@@ -46,11 +46,13 @@ function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+// Busca todos os jogos: 2 dias atrás + hoje + 5 dias à frente
 export const getMatches = createServerFn({ method: "GET" }).handler(async () => {
   const today = new Date();
+  const todayStr = isoDate(today);
 
-  // Busca 3 dias anteriores + hoje + 3 dias futuros para garantir sempre ter jogos
-  const deltas = [-3, -2, -1, 0, 1, 2, 3];
+  // -2 dias até +5 dias
+  const deltas = [-2, -1, 0, 1, 2, 3, 4, 5];
   const days = deltas.map((delta) => {
     const d = new Date(today);
     d.setUTCDate(d.getUTCDate() + delta);
@@ -67,29 +69,26 @@ export const getMatches = createServerFn({ method: "GET" }).handler(async () => 
 
   const all = results.flatMap((r) => r.events ?? []);
 
-  // Deduplicate by id
+  // Deduplicate
   const map = new Map<string, SDBEvent>();
   for (const e of all) map.set(e.idEvent, e);
-  const allEvents = Array.from(map.values());
+  const allEvents = Array.from(map.values()).sort((a, b) =>
+    a.strTimestamp.localeCompare(b.strTimestamp),
+  );
 
-  // Prioridade: hoje > amanhã > ontem > outros
-  const todayStr = isoDate(today);
+  // Separar por categoria
   const todayEvents = allEvents.filter((e) => e.dateEvent === todayStr);
+  const pastEvents = allEvents.filter((e) => e.dateEvent < todayStr);
+  const upcomingEvents = allEvents.filter((e) => e.dateEvent > todayStr);
 
-  // Se tiver jogos de hoje, mostra só hoje
-  // Se não tiver, mostra os mais próximos
-  const events = (todayEvents.length > 0 ? todayEvents : allEvents)
-    .sort((a, b) => a.strTimestamp.localeCompare(b.strTimestamp));
+  // Jogos de hoje: se vazio, usa os mais próximos disponíveis
+  const events = todayEvents.length > 0 ? todayEvents : allEvents;
 
-  return { events };
+  return { events, todayEvents, pastEvents, upcomingEvents, todayStr };
 });
 
 const POS_ORDER: Record<string, number> = {
-  Goalkeeper: 0,
-  Defender: 1,
-  Midfielder: 2,
-  Forward: 3,
-  Attacker: 3,
+  Goalkeeper: 0, Defender: 1, Midfielder: 2, Forward: 3, Attacker: 3,
 };
 
 function posRank(pos?: string | null): number {
@@ -102,7 +101,6 @@ function posRank(pos?: string | null): number {
 
 function pick11(players: SDBPlayer[] | null): SDBPlayer[] {
   if (!players || players.length === 0) return [];
-
   const sorted = [...players].sort((a, b) => {
     const pa = posRank(a.strPosition);
     const pb = posRank(b.strPosition);
@@ -112,30 +110,21 @@ function pick11(players: SDBPlayer[] | null): SDBPlayer[] {
     if (aHasPhoto !== bHasPhoto) return aHasPhoto ? -1 : 1;
     return 0;
   });
-
   const gk = sorted.filter((p) => posRank(p.strPosition) === 0).slice(0, 1);
   const def = sorted.filter((p) => posRank(p.strPosition) === 1).slice(0, 4);
   const mid = sorted.filter((p) => posRank(p.strPosition) === 2).slice(0, 3);
   const fwd = sorted.filter((p) => posRank(p.strPosition) === 3).slice(0, 3);
-
   const lineup = [...gk, ...def, ...mid, ...fwd];
-
   if (lineup.length < 11) {
     const used = new Set(lineup.map((p) => p.idPlayer));
     const rest = sorted.filter((p) => !used.has(p.idPlayer));
     lineup.push(...rest.slice(0, 11 - lineup.length));
   }
-
   return lineup.slice(0, 11);
 }
 
 export const getLineup = createServerFn({ method: "GET" })
-  .inputValidator(
-    z.object({
-      homeTeamId: z.string(),
-      awayTeamId: z.string(),
-    }),
-  )
+  .inputValidator(z.object({ homeTeamId: z.string(), awayTeamId: z.string() }))
   .handler(async ({ data }) => {
     const [homeRes, awayRes] = await Promise.all([
       fetchJson<{ player: SDBPlayer[] | null }>(
@@ -145,9 +134,5 @@ export const getLineup = createServerFn({ method: "GET" })
         `${BASE}/lookup_all_players.php?id=${data.awayTeamId}`,
       ).catch(() => ({ player: null })),
     ]);
-
-    return {
-      home: pick11(homeRes.player),
-      away: pick11(awayRes.player),
-    };
+    return { home: pick11(homeRes.player), away: pick11(awayRes.player) };
   });
