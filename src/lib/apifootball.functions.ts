@@ -102,7 +102,7 @@ export const getApiFootballLineup = createServerFn({ method: "GET" })
         number: p.player.number ?? null,
         pos: p.player.pos ?? null,
         grid: p.player.grid ?? null,
-        photo: `https://media.api-sports.io/football/players/${p.player.id}.png`,
+        photo: `/api/public/player-photo/${p.player.id}`,
       })),
     });
     return { home: parse(teams[0]), away: parse(teams[1]) };
@@ -131,7 +131,7 @@ export const getApiFootballDetails = createServerFn({ method: "GET" })
         number: p.player.number ?? null,
         pos: p.player.pos ?? null,
         grid: p.player.grid ?? null,
-        photo: `https://media.api-sports.io/football/players/${p.player.id}.png`,
+        photo: `/api/public/player-photo/${p.player.id}`,
       })),
     }));
 
@@ -164,7 +164,7 @@ export const getApiFootballDetails = createServerFn({ method: "GET" })
         allRatings.push({
           id: p.player.id,
           name: p.player.name,
-          photo: `https://media.api-sports.io/football/players/${p.player.id}.png`,
+          photo: `/api/public/player-photo/${p.player.id}`,
           teamId,
           rating,
           goals: s.goals?.total ?? 0,
