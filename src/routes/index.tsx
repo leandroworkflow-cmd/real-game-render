@@ -2,9 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getMatches, getLineup, type SDBEvent } from "@/biblioteca/sportsdb.functions";
-import { Field3D } from "@/componentes/Field3D";
-import { StatsPanel } from "@/componentes/StatsPanel";
+import { getMatches, getLineup, type SDBEvent } from "@/lib/sportsdb.functions";
+import { Field3D } from "@/components/Field3D";
+import { StatsPanel } from "@/components/StatsPanel";
 
 export const Route = createFileRoute("/")({
   head: () => ({
