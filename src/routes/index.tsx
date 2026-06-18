@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -6,6 +6,7 @@ import { getMatches, getLineup, type SDBEvent } from "@/lib/sportsdb.functions";
 import { Field3D, sdbToField, afToField, type FieldPlayer } from "@/components/Field3D";
 import { StatsPanel } from "@/components/StatsPanel";
 import { getApiFootballDay, getApiFootballLineup } from "@/lib/apifootball.functions";
+import { SiteNav } from "@/components/SiteNav";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -208,26 +209,31 @@ function HomePage() {
 function Header({ liveCount, total, lastUpdate }: { liveCount: number; total: number; lastUpdate: number }) {
   return (
     <header className="sticky top-0 z-20 border-b border-border/40 bg-background/70 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-[1500px] items-center justify-between px-4 py-4 lg:px-8">
-        <div className="flex items-center gap-3">
-          <div className="relative h-9 w-9">
+      <div className="mx-auto grid max-w-[1500px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 lg:px-8">
+        <Link to="/" className="flex min-w-0 items-center gap-3">
+          <div className="relative h-9 w-9 shrink-0">
             <div className="absolute inset-0 rounded-md bg-gradient-to-br from-neon to-cyan opacity-90" />
             <div className="absolute inset-[3px] rounded-sm bg-background" />
             <div className="absolute inset-0 flex items-center justify-center font-display text-sm font-bold text-neon">N</div>
           </div>
-          <div>
-            <div className="font-display text-base font-semibold tracking-tight">NEFRA<span className="text-neon">.</span>SPORTS</div>
-            <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Live Analytics // v2026</div>
+          <div className="min-w-0">
+            <div className="truncate font-display text-sm font-semibold tracking-tight sm:text-base">
+              NEFRA<span className="text-neon">.</span>SPORTS
+            </div>
+            <div className="hidden text-[10px] uppercase tracking-[0.3em] text-muted-foreground sm:block">
+              Live Analytics // v2026
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-4 text-xs">
-          <div className="hidden items-center gap-2 sm:flex">
+        </Link>
+        <div className="flex items-center gap-2 sm:gap-4">
+          <div className="hidden items-center gap-2 text-xs lg:flex">
             <span className="live-dot inline-block h-2 w-2 rounded-full bg-neon" />
             <span className="text-muted-foreground"><span className="text-neon">{liveCount}</span> ao vivo · {total} hoje</span>
           </div>
-          <div className="rounded-md border border-border bg-card/60 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            <span className="text-neon">●</span> SYNC {lastUpdate ? new Date(lastUpdate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "…"}
+          <div className="hidden rounded-md border border-border bg-card/60 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground sm:block">
+            <span className="text-neon">●</span> {lastUpdate ? new Date(lastUpdate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "…"}
           </div>
+          <SiteNav />
         </div>
       </div>
     </header>
@@ -264,22 +270,22 @@ function MatchCard({ event }: { event: SDBEvent }) {
   const away = event.intAwayScore ?? "-";
 
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card-glass relative overflow-hidden rounded-2xl p-6">
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card-glass relative overflow-hidden rounded-2xl p-4 sm:p-6">
       <div className="grid-bg absolute inset-0 opacity-40" />
       <div className="relative">
-        <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-          <span className="flex items-center gap-2">
-            {event.strLeagueBadge && <img src={event.strLeagueBadge} alt="" className="h-4 w-4 object-contain" />}
-            {event.strLeague}{event.strGroup ? ` · Grupo ${event.strGroup}` : ""}
+        <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+          <span className="flex min-w-0 items-center gap-2">
+            {event.strLeagueBadge && <img src={event.strLeagueBadge} alt="" className="h-4 w-4 shrink-0 object-contain" />}
+            <span className="truncate">{event.strLeague}{event.strGroup ? ` · Grupo ${event.strGroup}` : ""}</span>
           </span>
           <StatusBadge status={status} minute={minute} timestamp={event.strTimestamp} />
         </div>
-        <div className="mt-8 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+        <div className="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:mt-8 sm:gap-4">
           <TeamBlock name={event.strHomeTeam} badge={event.strHomeTeamBadge} side="home" />
           <div className="text-center">
-            <div className="font-display text-5xl font-bold tracking-tighter sm:text-6xl">
+            <div className="font-display text-3xl font-bold tracking-tighter sm:text-5xl md:text-6xl">
               <span className="text-neon">{home}</span>
-              <span className="mx-2 text-muted-foreground">:</span>
+              <span className="mx-1.5 text-muted-foreground sm:mx-2">:</span>
               <span>{away}</span>
             </div>
             <div className="mt-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
@@ -289,7 +295,7 @@ function MatchCard({ event }: { event: SDBEvent }) {
           <TeamBlock name={event.strAwayTeam} badge={event.strAwayTeamBadge} side="away" />
         </div>
         <ProbabilityBar event={event} />
-        <div className="mt-6 grid grid-cols-3 gap-3 border-t border-border/40 pt-4 text-center">
+        <div className="mt-6 grid grid-cols-3 gap-2 border-t border-border/40 pt-4 text-center sm:gap-3">
           <Stat label="Estádio" value={event.strVenue ?? "—"} />
           <Stat label="Local" value={event.strCountry ?? "—"} />
           <Stat label="Início" value={fmtTime(event.strTimestamp)} />
@@ -401,7 +407,7 @@ function FieldCard({ event }: { event: SDBEvent }) {
       </div>
 
       {hasData && (
-        <div className="relative mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-4">
+        <div className="relative mt-4 grid grid-cols-1 gap-3 border-t border-border/40 pt-4 sm:grid-cols-2">
           <LineupList players={homePlayers} name={event.strHomeTeam} badge={event.strHomeTeamBadge} side="home" />
           <LineupList players={awayPlayers} name={event.strAwayTeam} badge={event.strAwayTeamBadge} side="away" />
         </div>
@@ -478,14 +484,14 @@ function LineupList({ players, name, badge, side }: { players: FieldPlayer[]; na
 
 function TeamBlock({ name, badge, side }: { name: string; badge?: string | null; side: "home" | "away" }) {
   return (
-    <div className={`flex items-center gap-3 ${side === "away" ? "flex-row-reverse text-right" : ""}`}>
-      <div className="relative h-14 w-14 shrink-0 rounded-xl border border-border bg-card/60 p-1.5">
+    <div className={`flex min-w-0 items-center gap-2 sm:gap-3 ${side === "away" ? "flex-row-reverse text-right" : ""}`}>
+      <div className="relative h-10 w-10 shrink-0 rounded-xl border border-border bg-card/60 p-1 sm:h-14 sm:w-14 sm:p-1.5">
         {badge ? <img src={badge} alt={name} className="h-full w-full object-contain" />
           : <div className="flex h-full w-full items-center justify-center font-display text-lg text-muted-foreground">{name[0]}</div>}
       </div>
       <div className="min-w-0">
-        <div className="truncate font-display text-base font-semibold">{name}</div>
-        <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">{side === "home" ? "CASA" : "FORA"}</div>
+        <div className="truncate font-display text-xs font-semibold sm:text-base">{name}</div>
+        <div className="text-[9px] uppercase tracking-[0.25em] text-muted-foreground sm:text-[10px]">{side === "home" ? "CASA" : "FORA"}</div>
       </div>
     </div>
   );
