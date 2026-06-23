@@ -7,6 +7,7 @@ import { Field3D, sdbToField, afToField, type FieldPlayer } from "@/components/F
 import { StatsPanel } from "@/components/StatsPanel";
 import { getApiFootballDay, getApiFootballLineup } from "@/lib/apifootball.functions";
 import { SiteNav } from "@/components/SiteNav";
+import { SportsEventJsonLd } from "@/components/SportsEventJsonLd";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -254,6 +255,7 @@ function SectionTitle({ title, children }: { title: string; children?: React.Rea
 function FeaturedBlock({ event }: { event: SDBEvent }) {
   return (
     <div className="space-y-4">
+      <SportsEventJsonLd event={event} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <MatchCard event={event} />
         <FieldCard event={event} />
