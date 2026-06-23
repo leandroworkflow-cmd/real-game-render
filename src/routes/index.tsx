@@ -7,6 +7,7 @@ import { Field3D, sdbToField, afToField, type FieldPlayer } from "@/components/F
 import { StatsPanel } from "@/components/StatsPanel";
 import { getApiFootballDay, getApiFootballLineup } from "@/lib/apifootball.functions";
 import { SiteNav } from "@/components/SiteNav";
+import { SportsEventJsonLd } from "@/components/SportsEventJsonLd";
 
 export const Route = createFileRoute("/")({
   head: () => ({
