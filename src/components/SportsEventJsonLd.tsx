@@ -117,7 +117,6 @@ export function SportsEventJsonLd({ event }: { event: SDBEvent }) {
           superEvent: {
             "@type": "SportsEvent",
             name: event.strLeague,
-            ...(event.strSeason ? { description: `Temporada ${event.strSeason}` } : {}),
           },
         }
       : {}),
